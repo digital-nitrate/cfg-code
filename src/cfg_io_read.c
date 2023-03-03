@@ -47,7 +47,7 @@ __attribute__((nonnull, warn_unused_result)) static int dynarr_chk_sym(size_t us
 	return 0;
 }
 
-static int hash_init(struct hash_table* table) {
+__attribute__((nonnull, warn_unused_result)) static int hash_init(struct hash_table* table) {
 	struct hash_bin* const bins = malloc((sizeof *bins) * HASH_BASE);
 	if (bins == NULL) goto ErrorBins;
 	struct cfg_sym* const terms = malloc((sizeof *terms) * TERM_BASE);
@@ -72,7 +72,7 @@ static int hash_init(struct hash_table* table) {
 	ErrorBins: return 1;
 }
 
-static uintmax_t hash_comp(char const* name, size_t len) {
+__attribute__((nonnull, pure, warn_unused_result)) static uintmax_t hash_comp(char const* name, size_t len) {
 	uintmax_t val = 1337U;
 	char const* const end = name + len;
 	for (char const* curr = name; curr != end; ++curr) {
@@ -81,7 +81,7 @@ static uintmax_t hash_comp(char const* name, size_t len) {
 	return val;
 }
 
-static struct hash_bin* hash_ld(struct hash_table* restrict table, char const* restrict name, size_t len, enum cfg_type type) {
+__attribute__((nonnull, warn_unused_result)) static struct hash_bin* hash_ld(struct hash_table* restrict table, char const* restrict name, size_t len, enum cfg_type type) {
 	if (table->grammar.nterm_cnt + table->grammar.term_cnt >= (size_t)(HASH_LOAD * (double)table->bcnt)) {
 		size_t bcnt = table->bcnt * 2 - 1;
 		struct hash_bin* bins = malloc((sizeof *bins) * bcnt);
@@ -162,17 +162,15 @@ struct size_type {
 	enum rd_type type;
 };
 
-static struct size_type read_symbol(char* restrict buffer, size_t buffer_sz, FILE* restrict input) {
+__attribute__((nonnull)) static struct size_type read_symbol(char* restrict buffer, size_t buffer_sz, FILE* restrict input) {
 	struct size_type out;
 	int c = fgetc(input);
 	while (c == ' ' || c == '\t' || c == '\r') c = fgetc(input);
 	if (c == EOF) {
 		out.type = RD_EF;
-		fprintf(stderr, "EF\n");
 		return out;
 	} else if (c == '\n') {
 		out.type = RD_NL;
-		fprintf(stderr, "NL\n");
 		return out;
 	}
 	out.type = RD_TERM;
@@ -192,7 +190,6 @@ static struct size_type read_symbol(char* restrict buffer, size_t buffer_sz, FIL
 		else if (memcmp(buffer, eol, out.size) == 0) out.type = RD_EOL;
 		else if (memcmp(buffer, lambda, out.size) == 0) out.type = RD_LAMBDA;
 	}
-	fprintf(stderr, "%s\n", buffer);
 	return out;
 }
 

@@ -35,7 +35,7 @@ struct io_result cfg_io_write(cfg const* restrict grammar, FILE* restrict output
 			++counter;
 		}
 	}
-
+	fprintf(output, "\nGrammar Start Symbol of Goal: %s\n", grammar->start->name);
 	return (struct io_result){.type = RES_OK};
 }
 

@@ -12,6 +12,14 @@ int main(void) {
 		fputs("Error: Could not read cfg\n", stderr);
 		return EXIT_FAILURE;
 	}
+	cfg_tolambda(&grammar);
+	fputs("Lambda List:\n", stdout);
+	struct cfg_sym const* const end = grammar.nterms + grammar.nterm_cnt;
+	for (struct cfg_sym const* curr = grammar.nterms; curr != end; ++curr) {
+		if (curr->nterm.lambda) {
+			fprintf(stdout, "%s\n", curr->name);
+		}
+	}
 	res = cfg_io_write(&grammar, stdout);
 	cfg_free(&grammar);
 	if (res.type != RES_OK) {

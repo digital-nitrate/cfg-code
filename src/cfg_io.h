@@ -7,6 +7,8 @@ extern "C" {
 
 #include <stdio.h>
 
+#include "cfg.h"
+
 enum result_type {
 	RES_OK,
 	RES_MEM,

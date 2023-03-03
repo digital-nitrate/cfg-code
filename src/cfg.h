@@ -26,9 +26,7 @@ struct cfg_nterm {
 
 struct cfg_sym {
 	char* name;
-	union {
-		struct cfg_nterm nterm;
-	};
+	struct cfg_nterm nterm;
 	enum cfg_type type;
 };
 
@@ -41,6 +39,9 @@ typedef struct cfg {
 } cfg;
 
 extern void cfg_free(cfg*) __attribute__((nonnull));
+
+extern void cfg_tolambda(cfg*) __attribute__((nonnull));
+extern void cfg_firstset(cfg*) __attribute__((nonnull));
 
 #ifdef __cplusplus
 }
