@@ -7,10 +7,16 @@
 #include "cfg_io.h"
 
 #define HASH_BASE (15U)
-#define RSET_BASE (8U)
-#define RULE_BASE (8U)
-#define TERM_BASE (16U)
-#define NTERM_BASE (16U)
+#define RSET_BASE (1U)
+#define RULE_BASE (1U)
+#define TERM_BASE (1U)
+#define NTERM_BASE (1U)
+
+#define TUS_BASE (1U)
+#define NUS_BASE (1U)
+
+#define FI_BASE (1U)
+#define FO_BASE (1U)
 
 #define HASH_LOAD (0.7)
 
@@ -23,51 +29,27 @@ static char const lambda[] = "lambda";
 
 struct hash_bin {
 	uintmax_t hash;
-	struct cfg_sym* sym;
-	size_t r_cap;
+	cfg_sid id;
 };
 
 struct hash_table {
 	cfg grammar;
 	struct hash_bin* bins;
-	struct hash_bin* save;
 	size_t bcnt;
-	size_t ntcap;
-	size_t tcap;
 };
-
-__attribute__((nonnull, warn_unused_result)) static int dynarr_chk_sym(size_t usg, size_t* restrict cap, struct cfg_sym** restrict data) {
-	if (usg == *cap) {
-		size_t ncap = *cap * 2;
-		struct cfg_sym* ndata = realloc(*data, (sizeof *ndata) * ncap);
-		if (ndata == NULL) return 1;
-		*data = ndata;
-		*cap = ncap;
-	}
-	return 0;
-}
 
 __attribute__((nonnull, warn_unused_result)) static int hash_init(struct hash_table* table) {
 	struct hash_bin* const bins = malloc((sizeof *bins) * HASH_BASE);
 	if (bins == NULL) goto ErrorBins;
-	struct cfg_sym* const terms = malloc((sizeof *terms) * TERM_BASE);
-	if (terms == NULL) goto ErrorTerms;
-	struct cfg_sym* const nterms = malloc((sizeof *nterms) * NTERM_BASE);
-	if (nterms == NULL) goto ErrorNTerms;
+	if (DYNARR_INIT(term)(&(table->grammar.terms), TERM_BASE)) goto ErrorTerms;
+	if (DYNARR_INIT(nterm)(&(table->grammar.nterms), NTERM_BASE)) goto ErrorNTerms;
 	struct hash_bin* const end = bins + HASH_BASE;
-	for (struct hash_bin* curr = bins; curr != end; ++curr) curr->sym = NULL;
+	for (struct hash_bin* curr = bins; curr != end; ++curr) curr->id.id = ID_NONE;
 	table->bins = bins;
 	table->bcnt = HASH_BASE;
-	table->tcap = TERM_BASE;
-	table->save = NULL;
-	table->ntcap = NTERM_BASE;
-	table->grammar.nterms = nterms;
-	table->grammar.terms = terms;
-	table->grammar.start = NULL;
-	table->grammar.nterm_cnt = 0;
-	table->grammar.term_cnt = 0;
+	table->grammar.start.id = ID_NONE;
 	return 0;
-	ErrorNTerms: free(terms);
+	ErrorNTerms: DYNARR_FINI(term)(&(table->grammar.terms));
 	ErrorTerms: free(bins);
 	ErrorBins: return 1;
 }
@@ -81,69 +63,72 @@ __attribute__((nonnull, pure, warn_unused_result)) static uintmax_t hash_comp(ch
 	return val;
 }
 
-__attribute__((nonnull, warn_unused_result)) static struct hash_bin* hash_ld(struct hash_table* restrict table, char const* restrict name, size_t len, enum cfg_type type) {
-	if (table->grammar.nterm_cnt + table->grammar.term_cnt >= (size_t)(HASH_LOAD * (double)table->bcnt)) {
+__attribute__((nonnull, warn_unused_result)) static cfg_sid hash_ld(struct hash_table* restrict table, char const* restrict name, size_t len, unsigned char term) {
+	if (table->grammar.nterms.usg + table->grammar.terms.usg >= (size_t)(HASH_LOAD * (double)table->bcnt)) {
 		size_t bcnt = table->bcnt * 2 - 1;
 		struct hash_bin* bins = malloc((sizeof *bins) * bcnt);
-		if (bins == NULL) return NULL;
+		if (bins == NULL) goto ErrorRet;
 		struct hash_bin* const bend = bins + bcnt;
-		for (struct hash_bin* curr = bins; curr != bend; ++curr) curr->sym = NULL;
+		for (struct hash_bin* curr = bins; curr != bend; ++curr) curr->id = (cfg_sid){.id = ID_NONE};
 		struct hash_bin* const iend = table->bins + table->bcnt;
-		struct hash_bin* nsave = NULL;
 		for (struct hash_bin* curr = table->bins; curr != iend; ++curr) {
-			if (curr->sym != NULL) {
+			if (curr->id.id != ID_NONE) {
 				uintmax_t loc = curr->hash % bcnt;
-				while (bins[loc].sym != NULL) loc = (loc + 1) % bcnt;
+				while (bins[loc].id.id != ID_NONE) loc = (loc + 1) % bcnt;
 				bins[loc] = *curr;
-				if (curr == table->save) nsave = bins + loc;
 			}
 		}
 		free(table->bins);
 		table->bins = bins;
 		table->bcnt = bcnt;
-		table->save = nsave;
 	}
 	uintmax_t hash = hash_comp(name, len);
 	uintmax_t loc = hash % table->bcnt;
 	while (1) {
-		if (table->bins[loc].sym == NULL) break;
-		if (memcmp(table->bins[loc].sym->name, name, len) == 0) return table->bins + loc;
+		if (table->bins[loc].id.id == ID_NONE) break;
+		if (memcmp(table->bins[loc].id.term ? table->grammar.terms.data[table->bins[loc].id.id].name : table->grammar.nterms.data[table->bins[loc].id.id].name, name, len) == 0) return table->bins[loc].id;
 		loc = (loc + 1) % table->bcnt;
 	}
-	char* ncpy = malloc(len);
-	if (ncpy == NULL) return NULL;
-	switch (type) {
-		case CFG_T_NTERM: {
-			if (dynarr_chk_sym(table->grammar.nterm_cnt, &(table->ntcap), &(table->grammar.nterms))) {
-				free(ncpy);
-				return NULL;
-			}
-			struct cfg_rule* rules = malloc((sizeof *rules) * RSET_BASE);
-			if (rules == NULL) {
-				free(ncpy);
-				return NULL;
-			}
-			table->bins[loc].sym = table->grammar.nterms + table->grammar.nterm_cnt;
-			table->bins[loc].sym->nterm.rules = rules;
-			table->bins[loc].sym->nterm.r_cnt = 0;
-			table->bins[loc].r_cap = RSET_BASE;
-			++(table->grammar.nterm_cnt);
-			break;
+	if (term) {
+		if (DYNARR_CHK(term)(&(table->grammar.terms))) goto ErrorRet;
+		struct cfg_term* sym = table->grammar.terms.data + table->grammar.terms.usg;
+		if (DYNARR_INIT(rid)(&(sym->used), TUS_BASE)) goto ErrorRet;
+		char* ncpy = malloc(len);
+		if (ncpy == NULL) goto ErrorTermUsed;
+		memcpy(ncpy, name, len);
+		sym->name = ncpy;
+		table->bins[loc].id = (cfg_sid){.term = 1, .id = (unsigned int)table->grammar.terms.usg};
+		++(table->grammar.terms.usg);
+		if (0) {
+			ErrorTermUsed: DYNARR_FINI(rid)(&(sym->used));
+			goto ErrorRet;
 		}
-		case CFG_T_TERM:
-			if (dynarr_chk_sym(table->grammar.term_cnt, &(table->tcap), &(table->grammar.terms))) {
-				free(ncpy);
-				return NULL;
-			}
-			table->bins[loc].sym = table->grammar.terms + table->grammar.term_cnt;
-			++(table->grammar.term_cnt);
-			break;
+	} else {
+		if (DYNARR_CHK(nterm)(&(table->grammar.nterms))) goto ErrorRet;
+		struct cfg_nterm* sym = table->grammar.nterms.data + table->grammar.nterms.usg;
+		if (DYNARR_INIT(rule)(&(sym->rules), RSET_BASE)) goto ErrorRet;
+		if (DYNARR_INIT(rid)(&(sym->used), NUS_BASE)) goto ErrorRules;
+		if (DYNARR_INIT(sid)(&(sym->fiset), FI_BASE)) goto ErrorUsed;
+		if (DYNARR_INIT(sid)(&(sym->foset), FO_BASE)) goto ErrorFiset;
+		char* ncpy = malloc(len);
+		if (ncpy == NULL) goto ErrorFoset;
+		memcpy(ncpy, name, len);
+		sym->name = ncpy;
+		sym->lambda = 0;
+		table->bins[loc].id = (cfg_sid){.term = 0, .id = (unsigned int)table->grammar.nterms.usg};
+		++(table->grammar.nterms.usg);
+		if (0) {
+			ErrorFoset: DYNARR_FINI(sid)(&(sym->foset));
+			ErrorFiset: DYNARR_FINI(sid)(&(sym->fiset));
+			ErrorUsed: DYNARR_FINI(rid)(&(sym->used));
+			ErrorRules: DYNARR_FINI(rule)(&(sym->rules));
+			goto ErrorRet;
+		}
 	}
-	memcpy(ncpy, name, len);
-	table->bins[loc].sym->name = ncpy;
-	table->bins[loc].sym->type = type;
 	table->bins[loc].hash = hash;
-	return table->bins + loc;
+	return table->bins[loc].id;
+
+	ErrorRet: return (cfg_sid){.id = ID_NONE};
 }
 
 enum rd_type {
@@ -198,87 +183,55 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 	if (hash_init(&table)) return (struct io_result){.type = RES_MEM};
 	char buffer[BUFFER_SZ];
 	struct size_type sym;
+	cfg_sid active = (cfg_sid){.id = ID_NONE};
 	sym.type = RD_NL;
 	while (1) {
-		if (sym.type == RD_EF) break;
-		if (sym.type == RD_NL) {
-			sym = read_symbol(buffer, BUFFER_SZ, input);
-		}
-		if (sym.type == RD_NL) continue;
+		while (sym.type == RD_NL) sym = read_symbol(buffer, BUFFER_SZ, input);
 		if (sym.type == RD_EF) break;
 		if (sym.size == BUFFER_SZ) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (sym.type == RD_NTERM) {
-			table.save = hash_ld(&table, buffer, sym.size, CFG_T_NTERM);
-			if (table.save == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+			active = hash_ld(&table, buffer, sym.size, 0);
+			if (active.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 			sym = read_symbol(buffer, BUFFER_SZ, input);
 			if (sym.type != RD_ARROW) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		} else if (sym.type != RD_MID) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-		if (table.save->sym->nterm.r_cnt == table.save->r_cap) {
-			size_t rnew = table.save->r_cap * 2;
-			struct cfg_rule* rules = realloc(table.save->sym->nterm.rules, (sizeof *rules) * rnew);
-			if (rules == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-			table.save->r_cap = rnew;
-			table.save->sym->nterm.rules = rules;
-		}
-		struct cfg_rule* rule = table.save->sym->nterm.rules + table.save->sym->nterm.r_cnt;
-		struct cfg_sym** syms = malloc((sizeof *syms) * RULE_BASE);
-		if (syms == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-		rule->syms = syms;
-		rule->sym_cnt = 0;
-		size_t rule_cap = RULE_BASE;
+		if (DYNARR_CHK(rule)(&(table.grammar.nterms.data[active.id].rules))) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+		struct cfg_rule* rule = table.grammar.nterms.data[active.id].rules.data + table.grammar.nterms.data[active.id].rules.usg;
+		rule->owner = active;
+		if (DYNARR_INIT(sid)(&(rule->syms), RULE_BASE)) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		sym = read_symbol(buffer, BUFFER_SZ, input);
 		if (sym.type == RD_EF || sym.type == RD_NL || sym.type == RD_MID || sym.type == RD_ARROW) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (sym.type == RD_LAMBDA) {
-			free(rule->syms);
-			rule->syms = NULL;
 			sym = read_symbol(buffer, BUFFER_SZ, input);
 			if (sym.type != RD_EF && sym.type != RD_NL && sym.type != RD_MID) {/*TODO Fail*/}
 		} else {
 			if (sym.type == RD_EOL) {
-				if (table.grammar.start != NULL && table.grammar.start != table.save->sym) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-				table.grammar.start = table.save->sym;
-				rule->syms[rule->sym_cnt] = NULL;
-			} else {
-				struct hash_bin* con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? CFG_T_NTERM : CFG_T_TERM);
-				if (con == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-				rule->syms[0] = con->sym;
-				++(rule->sym_cnt);
+				if (table.grammar.start.id != ID_NONE && table.grammar.start.id != active.id) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+				table.grammar.start = active;
 			}
+			cfg_sid con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? 0 : 1);
+			if (con.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+			rule->syms.data[0] = con;
+			++(rule->syms.usg);
 			while (1) {
 				sym = read_symbol(buffer, BUFFER_SZ, input);
 				if (sym.type == RD_EF || sym.type == RD_NL || sym.type == RD_MID) break;
 				if (sym.type == RD_LAMBDA || sym.type == RD_ARROW) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-				if (rule->sym_cnt == rule_cap) {
-					rule_cap = 2 * rule_cap;
-					struct cfg_sym** rs = realloc(rule->syms, (sizeof *rs) * rule_cap);
-					if (rs == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-					rule->syms = rs;
-				}
+				if (DYNARR_CHK(sid)(&(rule->syms))) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 				if (sym.type == RD_EOL) {
-					if (table.grammar.start != NULL && table.grammar.start != table.save->sym) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-					table.grammar.start = table.save->sym;
-					rule->syms[rule->sym_cnt] = NULL;
-				} else {
-					struct hash_bin* con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? CFG_T_NTERM : CFG_T_TERM);
-					if (con == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-					rule->syms[rule->sym_cnt] = con->sym;
+					if (table.grammar.start.id != ID_NONE && table.grammar.start.id != active.id) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+					table.grammar.start = active;
 				}
-				++(rule->sym_cnt);
+				cfg_sid con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? 0 : 1);
+				if (con.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+				rule->syms.data[rule->syms.usg] = con;
+				++(rule->syms.usg);
 			}
 		}
-		++(table.save->sym->nterm.r_cnt);
+		++(table.grammar.nterms.data[active.id].rules.usg);
 	}
-	if (table.grammar.nterm_cnt == 0 || table.grammar.start == NULL) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+	if (table.grammar.nterms.usg == 0 || table.grammar.start.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 	free(table.bins);
-	struct cfg_sym* const nt_end = table.grammar.nterms + table.grammar.nterm_cnt;
-	for (struct cfg_sym* curr = table.grammar.nterms; curr != nt_end; ++curr) {
-		unsigned char* fiset = malloc((sizeof *fiset) * table.grammar.term_cnt);
-		if (fiset == NULL) {/*TODO*/}
-		unsigned char* const fe = fiset + table.grammar.term_cnt;
-		for (unsigned char* fc = fiset; fc != fe; ++fc) *fc = 0;
-		curr->nterm.fiset = fiset;
-		curr->nterm.lambda = 0;
-	}
 	*grammar = table.grammar;
 	return (struct io_result){.type = RES_OK};
 }

@@ -3,20 +3,23 @@
 #include "cfg.h"
 
 void cfg_free(cfg* grammar) {
-	struct cfg_sym* const nterm_end = grammar->nterms + grammar->nterm_cnt;	
-	for (struct cfg_sym* curr = grammar->nterms; curr != nterm_end; ++curr) {
+	struct cfg_nterm* const nterm_end = grammar->nterms.data + grammar->nterms.usg;	
+	for (struct cfg_nterm* curr = grammar->nterms.data; curr != nterm_end; ++curr) {
 		free(curr->name);
-		free(curr->nterm.fiset);
-		struct cfg_rule* const rule_end = curr->nterm.rules + curr->nterm.r_cnt;
-		for (struct cfg_rule* rcur = curr->nterm.rules; rcur != rule_end; ++rcur) {
-			free(rcur->syms);	
+		DYNARR_FINI(sid)(&(curr->fiset));
+		DYNARR_FINI(sid)(&(curr->foset));
+		DYNARR_FINI(rid)(&(curr->used));
+		struct cfg_rule* const rule_end = curr->rules.data + curr->rules.usg;
+		for (struct cfg_rule* rcur = curr->rules.data; rcur != rule_end; ++rcur) {
+			DYNARR_FINI(sid)(&(rcur->syms));
 		}
-		free(curr->nterm.rules);
+		DYNARR_FINI(rule)(&(curr->rules));
 	}
-	free(grammar->nterms);
-	struct cfg_sym* const term_end = grammar->terms + grammar->term_cnt;
-	for (struct cfg_sym* curr = grammar->terms; curr != term_end; ++curr) {
+	DYNARR_FINI(nterm)(&(grammar->nterms));
+	struct cfg_term* const term_end = grammar->terms.data + grammar->terms.usg;
+	for (struct cfg_term* curr = grammar->terms.data; curr != term_end; ++curr) {
 		free(curr->name);
+		DYNARR_FINI(rid)(&(curr->used));
 	}
-	free(grammar->terms);
+	DYNARR_FINI(term)(&(grammar->terms));
 }

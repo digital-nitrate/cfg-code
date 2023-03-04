@@ -7,41 +7,49 @@ extern "C" {
 
 #include <stddef.h>
 
-enum cfg_type {
-	CFG_T_TERM,
-	CFG_T_NTERM,
-};
+#include "dynarr.h"
+
+#define ID_NONE ((1U << 31) - 1)
+
+typedef struct {
+	unsigned int term : 1, id : 31;
+} cfg_sid;
+DYNARR_DECL(cfg_sid, sid)
+
+typedef unsigned int cfg_rid;
+DYNARR_DECL(cfg_rid, rid)
 
 struct cfg_rule {
-	struct cfg_sym** syms;
-	size_t sym_cnt;
+	DYNARR(sid) syms;
+	cfg_sid owner;
 };
+DYNARR_DECL(struct cfg_rule, rule)
 
 struct cfg_nterm {
-	struct cfg_rule* rules;
-	unsigned char* fiset;
-	size_t r_cnt;
+	DYNARR(rule) rules;
+	DYNARR(rid) used;
+	DYNARR(sid) fiset;
+	DYNARR(sid) foset;
+	char* name;
 	unsigned char lambda;
 };
+DYNARR_DECL(struct cfg_nterm, nterm)
 
-struct cfg_sym {
+struct cfg_term {
+	DYNARR(rid) used;
 	char* name;
-	struct cfg_nterm nterm;
-	enum cfg_type type;
 };
+DYNARR_DECL(struct cfg_term, term)
 
 typedef struct cfg {
-	struct cfg_sym* nterms;
-	struct cfg_sym* terms;
-	struct cfg_sym* start;
-	size_t nterm_cnt;
-	size_t term_cnt;
+	DYNARR(nterm) nterms;
+	DYNARR(term) terms;
+	cfg_sid start;
 } cfg;
 
 extern void cfg_free(cfg*) __attribute__((nonnull));
 
-extern void cfg_tolambda(cfg*) __attribute__((nonnull));
-extern void cfg_firstset(cfg*) __attribute__((nonnull));
+extern void cfg_lfiso(cfg*) __attribute__((nonnull));
 
 #ifdef __cplusplus
 }

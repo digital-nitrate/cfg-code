@@ -4,29 +4,29 @@
 #include "cfg_io.h"
 
 struct io_result cfg_io_write(cfg const* restrict grammar, FILE* restrict output) {
-	fprintf(output, "Grammar Non-Terminals\n%s", grammar->nterms->name);
-	struct cfg_sym const* const nterm_end = grammar->nterms + grammar->nterm_cnt;
-	for (struct cfg_sym const* curr = grammar->nterms + 1; curr != nterm_end; ++curr) {
+	fprintf(output, "Grammar Non-Terminals\n%s", grammar->nterms.data->name);
+	struct cfg_nterm const* const nterm_end = grammar->nterms.data + grammar->nterms.usg;
+	for (struct cfg_nterm const* curr = grammar->nterms.data + 1; curr != nterm_end; ++curr) {
 		fprintf(output, ", %s", curr->name);
 	}
-	fprintf(output, "\nGrammar Symbols\n%s", grammar->nterms->name);
-	for (struct cfg_sym const* curr = grammar->nterms + 1; curr != nterm_end; ++curr) {
+	fprintf(output, "\nGrammar Symbols\n%s", grammar->nterms.data->name);
+	for (struct cfg_nterm const* curr = grammar->nterms.data + 1; curr != nterm_end; ++curr) {
 		fprintf(output, ", %s", curr->name);
 	}
-	struct cfg_sym const* const term_end = grammar->terms + grammar->term_cnt;
-	for (struct cfg_sym const* curr = grammar->terms; curr != term_end; ++curr) {
+	struct cfg_term const* const term_end = grammar->terms.data + grammar->terms.usg;
+	for (struct cfg_term const* curr = grammar->terms.data; curr != term_end; ++curr) {
 		fprintf(output, ", %s", curr->name);
 	}
-	fputs(", $\n\nGrammar Rules\n", output);
+	fputs("\n\nGrammar Rules\n", output);
 	size_t counter = 1;
-	for (struct cfg_sym const* curr = grammar->nterms; curr != nterm_end; ++curr) {
-		struct cfg_rule const* rend = curr->nterm.rules + curr->nterm.r_cnt;
-		for (struct cfg_rule const* rcur = curr->nterm.rules; rcur != rend; ++rcur) {
+	for (struct cfg_nterm const* curr = grammar->nterms.data; curr != nterm_end; ++curr) {
+		struct cfg_rule const* rend = curr->rules.data + curr->rules.usg;
+		for (struct cfg_rule const* rcur = curr->rules.data; rcur != rend; ++rcur) {
 			fprintf(output, "(%zu)   %s ->", counter, curr->name);
-			if (rcur->sym_cnt != 0) {
-				struct cfg_sym* const* const send = rcur->syms + rcur->sym_cnt;
-				for (struct cfg_sym* const* scur = rcur->syms; scur != send; ++scur) {
-					fprintf(output, " %s", (*scur == NULL) ? "$" : (*scur)->name);
+			if (rcur->syms.usg != 0) {
+				cfg_sid const* const send = rcur->syms.data + rcur->syms.usg;
+				for (cfg_sid const* scur = rcur->syms.data; scur != send; ++scur) {
+					fprintf(output, " %s", (scur->term) ? grammar->terms.data[scur->id].name : grammar->nterms.data[scur->id].name);
 				}
 			} else {
 				fputs(" lambda", output);
@@ -35,7 +35,7 @@ struct io_result cfg_io_write(cfg const* restrict grammar, FILE* restrict output
 			++counter;
 		}
 	}
-	fprintf(output, "\nGrammar Start Symbol of Goal: %s\n", grammar->start->name);
+	fprintf(output, "\nGrammar Start Symbol or Goal: %s\n", grammar->nterms.data[grammar->start.id].name);
 	return (struct io_result){.type = RES_OK};
 }
 
