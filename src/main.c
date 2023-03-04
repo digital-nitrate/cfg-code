@@ -12,11 +12,12 @@ int main(void) {
 		fputs("Error: Could not read cfg\n", stderr);
 		return EXIT_FAILURE;
 	}
-	res = cfg_io_write(&grammar, stdout);
-	cfg_free(&grammar);
-	if (res.type != RES_OK) {
-		fputs("Error: Could not write cfg\n", stderr);
+	if (cfg_lfiso(&grammar)) {
+		cfg_free(&grammar);
+		fputs("Error: Could not handle cfg\n", stderr);
 		return EXIT_FAILURE;
 	}
+	cfg_io_write(&grammar, stdout);
+	cfg_free(&grammar);
 	return EXIT_SUCCESS;
 }

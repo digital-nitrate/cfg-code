@@ -16,12 +16,14 @@ typedef struct {
 } cfg_sid;
 DYNARR_DECL(cfg_sid, sid)
 
-typedef unsigned int cfg_rid;
+typedef struct {
+	cfg_sid sid;
+	unsigned int id;
+} cfg_rid;
 DYNARR_DECL(cfg_rid, rid)
 
 struct cfg_rule {
 	DYNARR(sid) syms;
-	cfg_sid owner;
 };
 DYNARR_DECL(struct cfg_rule, rule)
 
@@ -44,12 +46,13 @@ DYNARR_DECL(struct cfg_term, term)
 typedef struct cfg {
 	DYNARR(nterm) nterms;
 	DYNARR(term) terms;
+	DYNARR(sid) lambda;
 	cfg_sid start;
 } cfg;
 
 extern void cfg_free(cfg*) __attribute__((nonnull));
 
-extern void cfg_lfiso(cfg*) __attribute__((nonnull));
+extern int cfg_lfiso(cfg*) __attribute__((nonnull, warn_unused_result));
 
 #ifdef __cplusplus
 }

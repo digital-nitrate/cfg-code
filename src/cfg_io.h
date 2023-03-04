@@ -20,7 +20,7 @@ struct io_result {
 };
 
 extern struct io_result cfg_io_read(cfg* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
-extern struct io_result cfg_io_write(cfg const* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
+extern void cfg_io_write(cfg const* restrict, FILE* restrict) __attribute__((nonnull));
 
 #ifdef __cplusplus
 }

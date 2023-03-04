@@ -18,6 +18,8 @@
 #define FI_BASE (1U)
 #define FO_BASE (1U)
 
+#define LAMB_BASE (1U)
+
 #define HASH_LOAD (0.7)
 
 #define BUFFER_SZ (128U)
@@ -43,12 +45,14 @@ __attribute__((nonnull, warn_unused_result)) static int hash_init(struct hash_ta
 	if (bins == NULL) goto ErrorBins;
 	if (DYNARR_INIT(term)(&(table->grammar.terms), TERM_BASE)) goto ErrorTerms;
 	if (DYNARR_INIT(nterm)(&(table->grammar.nterms), NTERM_BASE)) goto ErrorNTerms;
+	if (DYNARR_INIT(sid)(&(table->grammar.lambda), LAMB_BASE)) goto ErrorLambda;
 	struct hash_bin* const end = bins + HASH_BASE;
 	for (struct hash_bin* curr = bins; curr != end; ++curr) curr->id.id = ID_NONE;
 	table->bins = bins;
 	table->bcnt = HASH_BASE;
 	table->grammar.start.id = ID_NONE;
 	return 0;
+	ErrorLambda: DYNARR_FINI(nterm)(&(table->grammar.nterms));
 	ErrorNTerms: DYNARR_FINI(term)(&(table->grammar.terms));
 	ErrorTerms: free(bins);
 	ErrorBins: return 1;
@@ -197,11 +201,15 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 		} else if (sym.type != RD_MID) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (DYNARR_CHK(rule)(&(table.grammar.nterms.data[active.id].rules))) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		struct cfg_rule* rule = table.grammar.nterms.data[active.id].rules.data + table.grammar.nterms.data[active.id].rules.usg;
-		rule->owner = active;
+		cfg_rid rid = (cfg_rid){.sid = active, .id = (unsigned int)(rule - table.grammar.nterms.data[active.id].rules.data)};
 		if (DYNARR_INIT(sid)(&(rule->syms), RULE_BASE)) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		sym = read_symbol(buffer, BUFFER_SZ, input);
 		if (sym.type == RD_EF || sym.type == RD_NL || sym.type == RD_MID || sym.type == RD_ARROW) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (sym.type == RD_LAMBDA) {
+			if (DYNARR_CHK(sid)(&(table.grammar.lambda))) {/*TODO*/}
+			table.grammar.lambda.data[table.grammar.lambda.usg] = active;
+			++(table.grammar.lambda.usg);
+			table.grammar.nterms.data[active.id].lambda = 1;
 			sym = read_symbol(buffer, BUFFER_SZ, input);
 			if (sym.type != RD_EF && sym.type != RD_NL && sym.type != RD_MID) {/*TODO Fail*/}
 		} else {
@@ -211,6 +219,17 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 			}
 			cfg_sid con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? 0 : 1);
 			if (con.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+			if (con.term) {
+				struct cfg_term* sym = table.grammar.terms.data + con.id;
+				if (DYNARR_CHK(rid)(&(sym->used))) {/*TODO*/}
+				sym->used.data[sym->used.usg] = rid;
+				++(sym->used.usg);
+			} else {
+				struct cfg_nterm* sym = table.grammar.nterms.data + con.id;
+				if (DYNARR_CHK(rid)(&(sym->used))) {/*TODO*/}
+				sym->used.data[sym->used.usg] = rid;
+				++(sym->used.usg);
+			}
 			rule->syms.data[0] = con;
 			++(rule->syms.usg);
 			while (1) {
