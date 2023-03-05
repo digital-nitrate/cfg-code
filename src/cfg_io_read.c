@@ -93,7 +93,8 @@ __attribute__((nonnull, warn_unused_result)) static cfg_sid hash_ld(struct hash_
 	uintmax_t loc = hash % table->bcnt;
 	while (1) {
 		if (table->bins[loc].id.id == ID_NONE) break;
-		if (memcmp(table->bins[loc].id.term ? table->grammar.terms.data[table->bins[loc].id.id].name : table->grammar.nterms.data[table->bins[loc].id.id].name, name, len) == 0) return table->bins[loc].id;
+		char const* nm = table->bins[loc].id.term ? table->grammar.terms.data[table->bins[loc].id.id].name : table->grammar.nterms.data[table->bins[loc].id.id].name;
+		if (strcmp(nm, name) == 0) return table->bins[loc].id;
 		loc = (loc + 1) % table->bcnt;
 	}
 	if (term) {

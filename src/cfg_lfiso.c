@@ -20,13 +20,12 @@ __attribute__((nonnull, warn_unused_result)) static int bld_lambda(cfg* grammar)
 			cfg_sid const* const send = rule->syms.data + rule->syms.usg;
 			cfg_sid const* scur = rule->syms.data + rule->tmp;
 			while (scur != send && scur->term == 0 && grammar->nterms.data[scur->id].lambda != 0) ++scur;
+			rule->tmp = (size_t)(scur - rule->syms.data);
 			if (scur == send) {
 				if (DYNARR_CHK(sid)(&(grammar->lambda))) return 1;
 				grammar->lambda.data[grammar->lambda.usg] = rcur->sid;
 				++(grammar->lambda.usg);
 				apl->lambda = 1;
-			} else {
-				rule->tmp = (size_t)(scur - rule->syms.data);
 			}
 		}
 		++curr;
@@ -42,36 +41,39 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fiset_unused(cfg con
 		struct cfg_rule const* const rhs = lhs->rules.data + ucur->id;
 		if (ucur->loc > rhs->tmp) continue;
 		if (DYNARR_CHK(sid)(&(tcur->fiset_inv))) return 1;
+		if (DYNARR_CHK(sid)(&(lhs->fiset))) return 1;
 		tcur->fiset_inv.data[tcur->fiset_inv.usg] = ucur->sid;
 		++(tcur->fiset_inv.usg);
-		if (DYNARR_CHK(sid)(&(lhs->fiset))) return 1;
 		lhs->fiset.data[lhs->fiset.usg] = (cfg_sid){.term = 1, .id = id};
 		++(lhs->fiset.usg);
 	}
 	return 0;
 }
 
-__attribute__((nonnull, warn_unused_result)) static int bld_foset_unused(cfg* grammar, struct cfg_term* tcur, DYNARR(rid)* used, unsigned int id) {
+__attribute__((nonnull, warn_unused_result)) static int bld_foset_trav(cfg const* grammar, struct cfg_term* tcur, unsigned int id, cfg_sid const* rend, cfg_sid const* rcur) {
+	while (rcur != rend && rcur->term == 0) {
+		DYNARR(sid)* foset = &(grammar->nterms.data[rcur->id].foset);
+		if (foset->usg == 0 || foset->data[foset->usg - 1].id != id) {
+			if (DYNARR_CHK(sid)(&(tcur->foset_inv))) return 1;
+			if (DYNARR_CHK(sid)(foset)) return 1;
+			tcur->foset_inv.data[tcur->foset_inv.usg] = *rcur;
+			++(tcur->foset_inv.usg);
+			foset->data[foset->usg] = (cfg_sid){.term = 1, .id = id};
+			++(foset->usg);
+		}
+		if ((grammar->nterms.data[rcur->id].fiset.usg != 0 && grammar->nterms.data[rcur->id].fiset.data[grammar->nterms.data[rcur->id].fiset.usg - 1].id == id) || grammar->nterms.data[rcur->id].lambda == 0) break;
+		--rcur;
+	}
+	return 0;
+}
+
+__attribute__((nonnull, warn_unused_result)) static int bld_foset_unused(cfg const* grammar, struct cfg_term* tcur, DYNARR(rid) const* used, unsigned int id) {
 	cfg_rid const* const uend = used->data + used->usg;
 	for (cfg_rid const* ucur = used->data; ucur != uend; ++ucur) {
 		if (ucur->loc == 0) continue;
 		struct cfg_nterm const* const lhs = grammar->nterms.data + ucur->sid.id;
 		struct cfg_rule const* const rhs = lhs->rules.data + ucur->id;
-		cfg_sid const* const rend = rhs->syms.data - 1;
-		cfg_sid const* rcur = rhs->syms.data + ucur->loc - 1;
-		while (rcur != rend && rcur->term == 0) {
-			DYNARR(sid)* foset = &(grammar->nterms.data[rcur->id].foset);
-			if (foset->usg == 0 || foset->data[foset->usg - 1].id != id) {
-				if (DYNARR_CHK(sid)(&(tcur->foset_inv))) return 1;
-				tcur->foset_inv.data[tcur->foset_inv.usg] = *rcur;
-				++(tcur->foset_inv.usg);
-				if (DYNARR_CHK(sid)(foset)) return 1;
-				foset->data[foset->usg] = (cfg_sid){.term = 1, .id = id};
-				++(foset->usg);
-			}
-			if ((grammar->nterms.data[rcur->id].fiset.usg != 0 && grammar->nterms.data[rcur->id].fiset.data[grammar->nterms.data[rcur->id].fiset.usg - 1].id == id) || grammar->nterms.data[rcur->id].lambda == 0) break;
-			--rcur;
-		}
+		if (bld_foset_trav(grammar, tcur, id, rhs->syms.data - 1, rhs->syms.data + ucur->loc - 1)) return 1;
 	}
 	return 0;
 }
@@ -82,7 +84,7 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fifosets(cfg* gramma
 		struct cfg_rule* const rend = ncur->rules.data + ncur->rules.usg;
 		for (struct cfg_rule* rcur = ncur->rules.data; rcur != rend; ++rcur) {
 			cfg_sid const* const lend = rcur->syms.data + rcur->syms.usg;
-			cfg_sid const* loc = rcur->syms.data;
+			cfg_sid const* loc = rcur->syms.data + rcur->tmp;
 			while (loc != lend && loc->term == 0 && grammar->nterms.data[loc->id].lambda != 0) ++loc;
 			rcur->tmp = (size_t)(loc - rcur->syms.data);
 		}
@@ -91,38 +93,20 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fifosets(cfg* gramma
 	for (struct cfg_term* tcur = grammar->terms.data; tcur != tend; ++tcur) {
 		unsigned int id = (unsigned int)(tcur - grammar->terms.data);
 		if (bld_fiset_unused(grammar, tcur, &(tcur->used), id)) return 1;
-		size_t curr = 0;
-		while (curr != tcur->fiset_inv.usg) {
+		for (size_t curr = 0; curr != tcur->fiset_inv.usg; ++curr) {
 			if (bld_fiset_unused(grammar, tcur, &(grammar->nterms.data[tcur->fiset_inv.data[curr].id].used), id)) return 1;
-			++curr;
 		}
 		if (bld_foset_unused(grammar, tcur, &(tcur->used), id)) return 1;
 		cfg_sid const* const fiend = tcur->fiset_inv.data + tcur->fiset_inv.usg;
 		for (cfg_sid const* ficur = tcur->fiset_inv.data; ficur != fiend; ++ficur) {
 			if (bld_foset_unused(grammar, tcur, &(grammar->nterms.data[ficur->id].used), id)) return 1;
 		}
-		curr = 0;
-		while (curr != tcur->foset_inv.usg) {
-			struct cfg_nterm* sym = &(grammar->nterms.data[tcur->foset_inv.data[curr].id]);
-			struct cfg_rule* aend = sym->rules.data + sym->rules.usg;
-			for (struct cfg_rule* acur = sym->rules.data; acur != aend; ++acur) {
-				cfg_sid const* const rend = acur->syms.data - 1;
-				cfg_sid const* rcur = acur->syms.data + acur->syms.usg - 1;
-				while (rcur != rend && rcur->term == 0) {
-					DYNARR(sid)* foset = &(grammar->nterms.data[rcur->id].foset);
-					if (foset->usg == 0 || foset->data[foset->usg - 1].id != id) {
-						if (DYNARR_CHK(sid)(&(tcur->foset_inv))) return 1;
-						tcur->foset_inv.data[tcur->foset_inv.usg] = *rcur;
-						++(tcur->foset_inv.usg);
-						if (DYNARR_CHK(sid)(foset)) return 1;
-						foset->data[foset->usg] = (cfg_sid){.term = 1, .id = id};
-						++(foset->usg);
-					}
-					if ((grammar->nterms.data[rcur->id].fiset.usg != 0 && grammar->nterms.data[rcur->id].fiset.data[grammar->nterms.data[rcur->id].fiset.usg - 1].id == id) || grammar->nterms.data[rcur->id].lambda == 0) break;
-					--rcur;
-				}
+		for (size_t curr = 0; curr != tcur->foset_inv.usg; ++curr) {
+			struct cfg_nterm const* const sym = &(grammar->nterms.data[tcur->foset_inv.data[curr].id]);
+			struct cfg_rule const* const aend = sym->rules.data + sym->rules.usg;
+			for (struct cfg_rule const* acur = sym->rules.data; acur != aend; ++acur) {
+				if (bld_foset_trav(grammar, tcur, id, acur->syms.data - 1, acur->syms.data + acur->syms.usg - 1)) return 1;
 			}
-			++curr;
 		}
 	}
 	return 0;
