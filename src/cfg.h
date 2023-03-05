@@ -19,11 +19,13 @@ DYNARR_DECL(cfg_sid, sid)
 typedef struct {
 	cfg_sid sid;
 	unsigned int id;
+	size_t loc;
 } cfg_rid;
 DYNARR_DECL(cfg_rid, rid)
 
 struct cfg_rule {
 	DYNARR(sid) syms;
+	size_t tmp;
 };
 DYNARR_DECL(struct cfg_rule, rule)
 

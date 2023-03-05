@@ -201,15 +201,17 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 		} else if (sym.type != RD_MID) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (DYNARR_CHK(rule)(&(table.grammar.nterms.data[active.id].rules))) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		struct cfg_rule* rule = table.grammar.nterms.data[active.id].rules.data + table.grammar.nterms.data[active.id].rules.usg;
-		cfg_rid rid = (cfg_rid){.sid = active, .id = (unsigned int)(rule - table.grammar.nterms.data[active.id].rules.data)};
+		unsigned int id = (unsigned int)(rule - table.grammar.nterms.data[active.id].rules.data);
 		if (DYNARR_INIT(sid)(&(rule->syms), RULE_BASE)) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		sym = read_symbol(buffer, BUFFER_SZ, input);
 		if (sym.type == RD_EF || sym.type == RD_NL || sym.type == RD_MID || sym.type == RD_ARROW) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
 		if (sym.type == RD_LAMBDA) {
-			if (DYNARR_CHK(sid)(&(table.grammar.lambda))) {/*TODO*/}
-			table.grammar.lambda.data[table.grammar.lambda.usg] = active;
-			++(table.grammar.lambda.usg);
-			table.grammar.nterms.data[active.id].lambda = 1;
+			if (table.grammar.nterms.data[active.id].lambda == 0) {
+				if (DYNARR_CHK(sid)(&(table.grammar.lambda))) {/*TODO*/}
+				table.grammar.lambda.data[table.grammar.lambda.usg] = active;
+				++(table.grammar.lambda.usg);
+				table.grammar.nterms.data[active.id].lambda = 1;
+			}
 			sym = read_symbol(buffer, BUFFER_SZ, input);
 			if (sym.type != RD_EF && sym.type != RD_NL && sym.type != RD_MID) {/*TODO Fail*/}
 		} else {
@@ -219,18 +221,11 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 			}
 			cfg_sid con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? 0 : 1);
 			if (con.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
-			if (con.term) {
-				struct cfg_term* sym = table.grammar.terms.data + con.id;
-				if (DYNARR_CHK(rid)(&(sym->used))) {/*TODO*/}
-				sym->used.data[sym->used.usg] = rid;
-				++(sym->used.usg);
-			} else {
-				struct cfg_nterm* sym = table.grammar.nterms.data + con.id;
-				if (DYNARR_CHK(rid)(&(sym->used))) {/*TODO*/}
-				sym->used.data[sym->used.usg] = rid;
-				++(sym->used.usg);
-			}
-			rule->syms.data[0] = con;
+			DYNARR(rid)* used = con.term ? &(table.grammar.terms.data[con.id].used) : &(table.grammar.nterms.data[con.id].used);
+			if (DYNARR_CHK(rid)(used)) {/*TODO*/}
+			used->data[used->usg] = (cfg_rid){.sid = active, .id = id, .loc = rule->syms.usg};
+			++(used->usg);
+			rule->syms.data[rule->syms.usg] = con;
 			++(rule->syms.usg);
 			while (1) {
 				sym = read_symbol(buffer, BUFFER_SZ, input);
@@ -243,6 +238,10 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 				}
 				cfg_sid con = hash_ld(&table, buffer, sym.size, sym.type == RD_NTERM ? 0 : 1);
 				if (con.id == ID_NONE) {/*TODO Fail*/ return (struct io_result){.type=RES_MEM};}
+				DYNARR(rid)* used = con.term ? &(table.grammar.terms.data[con.id].used) : &(table.grammar.nterms.data[con.id].used);
+				if (DYNARR_CHK(rid)(used)) {/*TODO*/}
+				used->data[used->usg] = (cfg_rid){.sid = active, .id = id, .loc = rule->syms.usg};
+				++(used->usg);
 				rule->syms.data[rule->syms.usg] = con;
 				++(rule->syms.usg);
 			}
