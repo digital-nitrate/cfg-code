@@ -21,6 +21,7 @@ void cfg_free(cfg* grammar) {
 		free(curr->name);
 		DYNARR_FINI(rid)(&(curr->used));
 		DYNARR_FINI(sid)(&(curr->fiset_inv));
+		DYNARR_FINI(sid)(&(curr->foset_inv));
 	}
 	DYNARR_FINI(term)(&(grammar->terms));
 	DYNARR_FINI(sid) (&(grammar->lambda));
