@@ -12,9 +12,9 @@ int main(void) {
 		fputs("Error: Could not read cfg\n", stderr);
 		return EXIT_FAILURE;
 	}
-	if (cfg_lfiso(&grammar)) {
+	if (cfg_lfifo(&grammar)) {
 		cfg_free(&grammar);
-		fputs("Error: Could not handle cfg\n", stderr);
+		fputs("Error: Memory failure building lfifo\n", stderr);
 		return EXIT_FAILURE;
 	}
 	cfg_io_write(&grammar, stdout);

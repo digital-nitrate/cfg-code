@@ -112,7 +112,7 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fifosets(cfg* gramma
 	return 0;
 }
 
-int cfg_lfiso(cfg* grammar) {
+int cfg_lfifo(cfg* grammar) {
 	if (bld_lambda(grammar)) return 1;
 	if (bld_fifosets(grammar)) return 1;
 	return 0;

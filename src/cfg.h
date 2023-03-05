@@ -56,7 +56,7 @@ typedef struct cfg {
 
 extern void cfg_free(cfg*) __attribute__((nonnull));
 
-extern int cfg_lfiso(cfg*) __attribute__((nonnull, warn_unused_result));
+extern int cfg_lfifo(cfg*) __attribute__((nonnull, warn_unused_result));
 
 #ifdef __cplusplus
 }
