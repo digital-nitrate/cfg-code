@@ -18,6 +18,8 @@
 #define FI_BASE (1U)
 #define FO_BASE (1U)
 
+#define IFI_BASE (1U)
+
 #define LAMB_BASE (1U)
 
 #define HASH_LOAD (0.7)
@@ -97,13 +99,15 @@ __attribute__((nonnull, warn_unused_result)) static cfg_sid hash_ld(struct hash_
 		if (DYNARR_CHK(term)(&(table->grammar.terms))) goto ErrorRet;
 		struct cfg_term* sym = table->grammar.terms.data + table->grammar.terms.usg;
 		if (DYNARR_INIT(rid)(&(sym->used), TUS_BASE)) goto ErrorRet;
+		if (DYNARR_INIT(sid)(&(sym->fiset_inv), IFI_BASE)) goto ErrorTermUsed;
 		char* ncpy = malloc(len);
-		if (ncpy == NULL) goto ErrorTermUsed;
+		if (ncpy == NULL) goto ErrorTermFiset;
 		memcpy(ncpy, name, len);
 		sym->name = ncpy;
 		table->bins[loc].id = (cfg_sid){.term = 1, .id = (unsigned int)table->grammar.terms.usg};
 		++(table->grammar.terms.usg);
 		if (0) {
+			ErrorTermFiset: DYNARR_FINI(sid)(&(sym->fiset_inv));
 			ErrorTermUsed: DYNARR_FINI(rid)(&(sym->used));
 			goto ErrorRet;
 		}

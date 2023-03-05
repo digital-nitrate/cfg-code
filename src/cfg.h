@@ -41,6 +41,7 @@ DYNARR_DECL(struct cfg_nterm, nterm)
 
 struct cfg_term {
 	DYNARR(rid) used;
+	DYNARR(sid) fiset_inv;
 	char* name;
 };
 DYNARR_DECL(struct cfg_term, term)

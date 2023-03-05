@@ -20,6 +20,7 @@ void cfg_free(cfg* grammar) {
 	for (struct cfg_term* curr = grammar->terms.data; curr != term_end; ++curr) {
 		free(curr->name);
 		DYNARR_FINI(rid)(&(curr->used));
+		DYNARR_FINI(sid)(&(curr->fiset_inv));
 	}
 	DYNARR_FINI(term)(&(grammar->terms));
 	DYNARR_FINI(sid) (&(grammar->lambda));
