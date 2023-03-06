@@ -169,6 +169,7 @@ __attribute__((nonnull)) static struct size_type read_symbol(char* restrict buff
 		out.type = RD_EF;
 		return out;
 	} else if (c == '\n') {
+		*col = 0;
 		++*line;
 		out.type = RD_NL;
 		return out;
@@ -212,7 +213,9 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 			if (active.id == ID_NONE) {result.type=RES_MEM;goto CleanTable;}
 			sym = read_symbol(buffer, BUFFER_SZ, input, &(result.line), &(result.col));
 			if (sym.type != RD_ARROW) {result.type=RES_ARROW;goto CleanTable;}
-		} else if (sym.type != RD_MID) {result.type=RES_MID;goto CleanTable;}
+		} else if (sym.type == RD_MID) {
+			if (active.id == ID_NONE) {result.type=RES_S;goto CleanTable;}
+		} else {result.type=RES_MID;goto CleanTable;}
 		if (DYNARR_CHK(rule)(&(table.grammar.nterms.data[active.id].rules))) {result.type=RES_MEM;goto CleanTable;}
 		struct cfg_rule* rule = table.grammar.nterms.data[active.id].rules.data + table.grammar.nterms.data[active.id].rules.usg;
 		unsigned int id = (unsigned int)(rule - table.grammar.nterms.data[active.id].rules.data);

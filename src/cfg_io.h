@@ -20,6 +20,7 @@ enum result_type {
 	RES_STR,
 	RES_SLO,
 	RES_REP,
+	RES_S,
 };
 
 struct io_result {
