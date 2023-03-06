@@ -12,11 +12,20 @@ extern "C" {
 enum result_type {
 	RES_OK,
 	RES_MEM,
-	RES_BAD,
+	RES_FULLBUF,
+	RES_ARROW,
+	RES_MID,
+	RES_SYM,
+	RES_END,
+	RES_STR,
+	RES_SLO,
+	RES_REP,
 };
 
 struct io_result {
 	enum result_type type;
+	size_t line;
+	size_t col;
 };
 
 extern struct io_result cfg_io_read(cfg* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
