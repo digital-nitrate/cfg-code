@@ -6,6 +6,7 @@ void cfg_free(cfg* grammar) {
 	struct cfg_nterm* const nterm_end = grammar->nterms.data + grammar->nterms.usg;	
 	for (struct cfg_nterm* curr = grammar->nterms.data; curr != nterm_end; ++curr) {
 		free(curr->name);
+		free(curr->ll1);
 		DYNARR_FINI(sid)(&(curr->fiset));
 		DYNARR_FINI(sid)(&(curr->foset));
 		DYNARR_FINI(rid)(&(curr->used));

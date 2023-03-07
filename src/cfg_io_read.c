@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
 
 #include "cfg.h"
 #include "cfg_io.h"
@@ -127,6 +128,7 @@ __attribute__((nonnull, warn_unused_result)) static cfg_sid hash_ld(struct hash_
 		memcpy(ncpy, name, len);
 		sym->name = ncpy;
 		sym->lambda = 0;
+		sym->ll1 = NULL;
 		table->bins[loc].id = (cfg_sid){.term = 0, .id = (unsigned int)table->grammar.nterms.usg};
 		++(table->grammar.nterms.usg);
 		if (0) {
@@ -268,11 +270,19 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 		CleanRule: DYNARR_FINI(sid)(&(rule->syms));
 		goto CleanTable;
 	}
-	if (table.grammar.nterms.usg == 0 || table.grammar.start.id == ID_NONE) {result.type=RES_SLO;goto CleanTable;}
 	free(table.bins);
+	if (table.grammar.nterms.usg == 0 || table.grammar.start.id == ID_NONE) {result.type=RES_SLO;goto CleanGrammar;}
+	struct cfg_nterm* const nend = table.grammar.nterms.data + table.grammar.nterms.usg;
+	for (struct cfg_nterm* ncur = table.grammar.nterms.data; ncur != nend; ++ncur) {
+		unsigned int* ll1 = malloc((sizeof *ll1) * table.grammar.terms.usg);
+		if (ll1 == NULL) {result.type=RES_MEM;goto CleanGrammar;}
+		unsigned int* const ll1_end = ll1 + table.grammar.terms.usg;
+		for (unsigned int* lc = ll1; lc != ll1_end; ++lc) *lc = UINT_MAX;
+		ncur->ll1 = ll1;
+	}
 	*grammar = table.grammar;
 	return result;
 	CleanTable: free(table.bins);
-	cfg_free(&(table.grammar));
+	CleanGrammar: cfg_free(&(table.grammar));
 	return result;
 }

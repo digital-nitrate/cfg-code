@@ -35,6 +35,7 @@ struct cfg_nterm {
 	DYNARR(sid) fiset;
 	DYNARR(sid) foset;
 	char* name;
+	unsigned int* ll1;
 	unsigned char lambda;
 };
 DYNARR_DECL(struct cfg_nterm, nterm)

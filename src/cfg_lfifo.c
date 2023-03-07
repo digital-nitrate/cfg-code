@@ -1,3 +1,5 @@
+#include <limits.h>
+
 #include "cfg.h"
 
 __attribute__((nonnull, warn_unused_result)) static int bld_lambda(cfg* grammar) {
@@ -37,9 +39,15 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fiset_unused(cfg con
 	cfg_rid const* const uend = used->data + used->usg;
 	for (cfg_rid const* ucur = used->data; ucur != uend; ++ucur) {
 		struct cfg_nterm* const lhs = grammar->nterms.data + ucur->sid.id;
-		if (lhs->fiset.usg != 0 && lhs->fiset.data[lhs->fiset.usg - 1].id == id) continue;
 		struct cfg_rule const* const rhs = lhs->rules.data + ucur->id;
 		if (ucur->loc > rhs->tmp) continue;
+		unsigned int pt = lhs->ll1[id];
+		if (pt == UINT_MAX) {
+			lhs->ll1[id] = ucur->id;
+		} else if (pt != ucur->id) {
+			lhs->ll1[id] = UINT_MAX - 1;
+		}
+		if (lhs->fiset.usg != 0 && lhs->fiset.data[lhs->fiset.usg - 1].id == id) continue;
 		if (DYNARR_CHK(sid)(&(tcur->fiset_inv))) return 1;
 		if (DYNARR_CHK(sid)(&(lhs->fiset))) return 1;
 		tcur->fiset_inv.data[tcur->fiset_inv.usg] = ucur->sid;
@@ -105,6 +113,13 @@ __attribute__((nonnull, warn_unused_result)) static int bld_fifosets(cfg* gramma
 			struct cfg_nterm const* const sym = &(grammar->nterms.data[tcur->foset_inv.data[curr].id]);
 			struct cfg_rule const* const aend = sym->rules.data + sym->rules.usg;
 			for (struct cfg_rule const* acur = sym->rules.data; acur != aend; ++acur) {
+				if (acur->tmp == acur->syms.usg) {
+					if (sym->ll1[id] == UINT_MAX) {
+						sym->ll1[id] = (unsigned int)(acur - sym->rules.data);
+					} else if (sym->ll1[id] != (unsigned int)(acur - sym->rules.data)) {
+						sym->ll1[id] = UINT_MAX - 1;
+					}
+				}
 				if (bld_foset_trav(grammar, tcur, id, acur->syms.data - 1, acur->syms.data + acur->syms.usg - 1)) return 1;
 			}
 		}
