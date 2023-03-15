@@ -29,8 +29,19 @@ struct io_result {
 	size_t col;
 };
 
-extern struct io_result cfg_io_read(cfg* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
+typedef struct const_hash {
+    cfg_sid* bins;
+	size_t bcnt;
+} const_hash;
+
+struct tokstream {
+	cfg_sid* toks;
+	size_t len;
+};
+
+extern struct io_result cfg_io_read(cfg* restrict, const_hash* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
 extern void cfg_io_write(cfg const* restrict, FILE* restrict) __attribute__((nonnull));
+extern struct tokstream cfg_io_tstream(cfg const* restrict, const_hash const* restrict, FILE* restrict) __attribute__((nonnull, warn_unused_result));
 
 #ifdef __cplusplus
 }

@@ -198,7 +198,7 @@ __attribute__((nonnull)) static struct size_type read_symbol(char* restrict buff
 	return out;
 }
 
-struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
+struct io_result cfg_io_read(cfg* restrict grammar, const_hash* restrict map, FILE* restrict input) {
 	struct io_result result = {.type = RES_OK, .line = 1, .col = 0};
 	struct hash_table table;
 	if (hash_init(&table)) return (struct io_result){.type = RES_MEM};
@@ -270,6 +270,13 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 		CleanRule: DYNARR_FINI(sid)(&(rule->syms));
 		goto CleanTable;
 	}
+	cfg_sid* bins = malloc((sizeof *bins) * table.bcnt);
+	if (bins == NULL) {result.type=RES_MEM;goto CleanTable;}
+	for (size_t i = 0; i < table.bcnt; ++i) {
+		bins[i] = table.bins[i].id;
+	}
+	map->bins = bins;
+	map->bcnt = table.bcnt;
 	free(table.bins);
 	if (table.grammar.nterms.usg == 0 || table.grammar.start.id == ID_NONE) {result.type=RES_SLO;goto CleanGrammar;}
 	struct cfg_nterm* const nend = table.grammar.nterms.data + table.grammar.nterms.usg;
@@ -286,3 +293,53 @@ struct io_result cfg_io_read(cfg* restrict grammar, FILE* restrict input) {
 	CleanGrammar: cfg_free(&(table.grammar));
 	return result;
 }
+
+struct tokstream cfg_io_tstream(cfg const* restrict grammar, const_hash const* restrict map, FILE* restrict t) {
+	cfg_sid* toks = malloc((sizeof *toks) * 16);
+	if (toks == NULL) return (struct tokstream){.toks=NULL,.len=0};
+	size_t cur = 0;
+	size_t cap = 16;
+	char buffer[128];
+	int c;
+	while (1) {
+		if (cur == cap) {
+			cap = 2 * cap;
+			cfg_sid* tmp = realloc(toks, (sizeof *toks) * cap);
+			if (tmp == NULL) {free(toks);return (struct tokstream){.toks=NULL,.len=0};}
+			toks = tmp;
+		}
+		do {
+			c = fgetc(t);
+		} while (c == ' ' || c == '\t' || c == '\r' || c == '\n');
+		if (c == EOF) break;
+		buffer[0] = (char)c;
+		size_t bc = 1;
+		while (1) {
+			c = fgetc(t);
+			if (c == EOF || c == '\n' || c == ' ' || c == '\r' || c == '\t') break;
+			if (bc == 127) {free(toks);return (struct tokstream){.toks=NULL,.len=0};}
+			buffer[bc] = (char)c;
+			++bc;
+		}
+		buffer[bc] = '\0';
+		++bc;
+		uintmax_t loc = hash_comp(buffer, bc) % map->bcnt;
+		while (1) {
+			if (map->bins[loc].id == ID_NONE) {free(toks);return (struct tokstream){.toks=NULL,.len=0};}
+			if (map->bins[loc].term && strcmp(grammar->terms.data[map->bins[loc].id].name, buffer) == 0) {toks[cur] = map->bins[loc];break;}
+			loc = (loc + 1) % map->bcnt;
+		}
+		while (c != '\n' && c != EOF) c = fgetc(t);
+		++cur;
+	}
+	uintmax_t loc = hash_comp("$", 2) % map->bcnt;
+	while (1) {
+		if (map->bins[loc].id == ID_NONE) {free(toks);return (struct tokstream){.toks=NULL,.len=0};}
+		if (map->bins[loc].term && strcmp(grammar->terms.data[map->bins[loc].id].name, "$") == 0) {toks[cur] = map->bins[loc];break;}
+		loc = (loc + 1) % map->bcnt;
+	}
+	++cur;
+	return (struct tokstream){.toks=toks,.len=cur};
+}
+
+

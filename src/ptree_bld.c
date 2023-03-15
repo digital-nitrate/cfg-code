@@ -1,17 +1,17 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include "cfg.h"
+#include "cfg_io.h"
 #include "ptree.h"
 
-static unsigned int const* ptree_bld_inner(ptree* restrict tree, cfg_sid own, cfg const* restrict grammar, unsigned int const* restrict str, unsigned int const* restrict end) {
-	if (str == end) return NULL;
+static cfg_sid const* ptree_bld_inner(ptree* restrict tree, cfg_sid own, cfg const* restrict grammar, cfg_sid const* restrict str, cfg_sid const* restrict end) {
+	if (str == end || str->term == 0) return NULL;
 	if (own.term) {
-		if (*str != own.id) return NULL;
+		if (str->id != own.id) return NULL;
 		++str;
 	} else {
 		struct cfg_nterm const* const sym = &(grammar->nterms.data[own.id]);
-		unsigned int rule = sym->ll1[*str];
+		unsigned int rule = sym->ll1[str->id];
 		if (rule == UINT_MAX || rule == UINT_MAX - 1) return NULL;
 		struct cfg_rule const* const r = &(sym->rules.data[rule]);
 		size_t const cnt = r->syms.usg;
@@ -32,7 +32,7 @@ static unsigned int const* ptree_bld_inner(ptree* restrict tree, cfg_sid own, cf
 	return str;
 }
 
-int ptree_bld(ptree* restrict tree, cfg const* restrict grammar, unsigned int const* restrict str, size_t len) {
+int ptree_bld(ptree* restrict tree, cfg const* restrict grammar, cfg_sid const* restrict str, size_t len) {
 	if (ptree_bld_inner(tree, grammar->start, grammar, str, str + len) != str + len) return 1;
 	return 0;
 }

@@ -7,63 +7,21 @@
 #include "ptree.h"
 #include "ptree_io.h"
 
-#define TOKEN_ARR 128
-
-static size_t bld_arr(unsigned int* restrict tarr, size_t tlen, char const* restrict str) {
-	unsigned int* const tend = tarr + tlen;
-	unsigned int* tcur = tarr;
-	char const* c = str;
-	unsigned char flg = 0;
-	unsigned int cntr = 0;
-	while (1) {
-		if (*c == '\0') {
-			if (flg) {
-				*tcur = cntr;
-				++tcur;
-			}
-			return (size_t)(tcur - tarr);
-		}
-		switch (*c) {
-			case ' ':
-				if (flg) {
-					*tcur = cntr;
-					++tcur;
-					if (tcur == tend) return (size_t)(tcur - tarr);
-					flg = 0;
-				}
-				break;
-			case '0':
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-			case '8':
-			case '9':
-				if (flg) {
-					cntr = 10 * cntr + (unsigned int)(*c - '0');	
-				} else {
-					flg = 1;
-					cntr = (unsigned int)(*c - '0');
-				}
-				break;
-			default:
-				if (flg) {
-					*tcur = cntr;
-					++tcur;
-				}
-				return (size_t)(tcur - tarr);
-		}
-		++c;
-	}
-}
-
 int main(int argc, char** argv) {
+	if (argc < 3) {
+		fputs("Format: ./cfg-code <src> <out> [<tstream> ...]\n", stderr);
+		return EXIT_FAILURE;
+	}
+	FILE* in = fopen(argv[1], "rb");
+	if (in == NULL) {
+		fprintf(stderr, "Error: Could not open \"%s\"\n", argv[1]);
+		return EXIT_FAILURE;
+	}
 	cfg grammar;
+	const_hash map;
 	struct io_result res;
-	res = cfg_io_read(&grammar, stdin);
+	res = cfg_io_read(&grammar, &map, in);
+	fclose(in);
 	if (res.type != RES_OK) {
 		char const* cause;
 		switch (res.type) {
@@ -105,23 +63,44 @@ int main(int argc, char** argv) {
 	}
 	if (cfg_lfifo(&grammar)) {
 		cfg_free(&grammar);
+		free(map.bins);
 		fputs("Error: Memory failure building lfifo\n", stderr);
 		return EXIT_FAILURE;
 	}
-	cfg_io_write(&grammar, stdout);
-	unsigned int tokens[TOKEN_ARR];
-	for (int i = 1; i < argc; ++i) {
-		ptree tree;
-		size_t len = bld_arr(tokens, TOKEN_ARR, argv[i]);
-		int res = ptree_bld(&tree, &grammar, tokens, len);
-		if (res) {
-			fprintf(stdout, "Failure Building Tree For \"%s\"\n", argv[i]);
-		} else {
-			ptree_write(&tree, &grammar, stdout);
-			ptree_free(&tree, &grammar);
-			fputc('\n', stdout);
-		}
+	FILE* out = fopen(argv[2], "wb");
+	if (out == NULL) {
+		cfg_free(&grammar);
+		free(map.bins);
+		fprintf(stderr, "Error: Could not open \"%s\"\n", argv[2]);
+		return EXIT_FAILURE;
 	}
+	cfg_io_write(&grammar, out);
+	for (int i = 3; i < argc; ++i) {
+		ptree tree;
+		FILE* str = fopen(argv[i], "rb");
+		if (str == NULL) {
+			fprintf(out, "Error: Could not open \"%s\"\n", argv[i]);
+			continue;
+		}
+		struct tokstream toks = cfg_io_tstream(&grammar, &map, str);
+		if (toks.toks == NULL) {
+			fclose(str);
+			fprintf(out, "Error: Could not build token stream from file \"%s\"\n", argv[i]);
+			continue;
+		}
+		int res = ptree_bld(&tree, &grammar, toks.toks, toks.len);
+		if (res) {
+			fprintf(out, "Failure Building Tree For \"%s\"\n", argv[i]);
+		} else {
+			ptree_write(&tree, &grammar, out);
+			ptree_free(&tree, &grammar);
+			fputc('\n', out);
+		}
+		free(toks.toks);
+		fclose(str);
+	}
+	fclose(out);
+	free(map.bins);
 	cfg_free(&grammar);
 	return EXIT_SUCCESS;
 }
